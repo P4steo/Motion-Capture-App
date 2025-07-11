@@ -49,16 +49,21 @@ class OpenPoseBoneDetector:
 
     def detect(self, frame, keypoints):
         """
-        Rysuje szkielet na obrazie na podstawie punktów BODY_25 w formacie [[x, y, conf], ...]
+        Rysuje szkielet na obrazie na podstawie punktów BODY_25 w formacie [[x, y, z, conf], ...] lub [[x, y, conf], ...]
         :param frame: obraz OpenCV (BGR)
-        :param keypoints: lista 25 punktów [x, y, confidence]
+        :param keypoints: lista 25 punktów [x, y, (z,) confidence]
         :return: obraz z narysowanym szkieletem
         """
         bone_points = {}
         for name, idx in OPENPOSE_BONE_MAP.items():
             if idx >= len(keypoints):
                 continue
-            x, y, conf = keypoints[idx]
+            # Obsługa zarówno [x, y, conf] jak i [x, y, z, conf]
+            if len(keypoints[idx]) >= 4:
+                x, y, *_ = keypoints[idx]
+                conf = keypoints[idx][3]
+            else:
+                x, y, conf = keypoints[idx]
             if conf > 0.05:  # Rysuj tylko pewne punkty
                 bone_points[name] = (int(x), int(y))
         # Rysuj połączenia
