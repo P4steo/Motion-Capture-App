@@ -5,9 +5,9 @@ import mediapipe as mp
 import json
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QVBoxLayout, QPushButton,
-    QComboBox, QGroupBox, QMessageBox, QTabWidget, QTextEdit, QHBoxLayout, QFileDialog
+    QComboBox, QGroupBox, QMessageBox, QTabWidget, QTextEdit, QHBoxLayout, QFileDialog, QSpacerItem, QSizePolicy
 )
-from PyQt5.QtCore import QTimer, Qt, QTime
+from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QImage, QPixmap, QFont
 
 from bone_detect import OpenPoseBoneDetector
@@ -84,7 +84,6 @@ def get_simple_2d_rotations(points):
 def get_bvh_rotations(points):
     if points is None or len(points) < 25:
         return [[0, 0, 0]] * 16
-
     bones = [
         (8, 8, 1,  "Spine"),
         (1, 1, 0,  "Neck"),
@@ -97,7 +96,6 @@ def get_bvh_rotations(points):
         (9, 9,10,  "RightHip"),
         (10,10,11, "RightKnee"),
     ]
-
     def rotation_from_three_points(parent, joint, child):
         v1 = np.array(points[joint][:3]) - np.array(points[parent][:3])
         v2 = np.array(points[child][:3]) - np.array(points[joint][:3])
@@ -124,7 +122,6 @@ def get_bvh_rotations(points):
         euler = np.degrees([z, x, y])
         euler = [0.0 if (isinstance(v, float) and (np.isnan(v) or np.isinf(v))) else v for v in euler]
         return euler
-
     rots = [[0.0, 0.0, 0.0]]
     for parent, joint, child, _ in bones:
         rots.append(rotation_from_three_points(parent, joint, child))
@@ -136,7 +133,7 @@ class MotionCaptureApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Motion Capture App")
-        self.setMinimumSize(1000, 700)
+        self.setMinimumSize(1150, 750)
         self.cap = None
         self.mp_pose = mp.solutions.pose
         self.pose = self.mp_pose.Pose(
@@ -156,43 +153,63 @@ class MotionCaptureApp(QMainWindow):
         self.rotation_mode = '2D'
         self.mapping_type = "Mediapipe"
         self.openpose_detector = OpenPoseBoneDetector()
-
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_frame)
         self.preview_timer = QTimer()
         self.preview_timer.timeout.connect(self.preview_frame)
+        self.quick_record_pending = False
 
-        # Zegar
-        self.clock_lbl = QLabel()
-        self.clock_lbl.setAlignment(Qt.AlignRight | Qt.AlignTop)
-        self.clock_lbl.setStyleSheet("font-size:16px; color:#2980b9; background:rgba(255,255,255,0.8); padding:3px; border-radius:5px;")
-        self.clock_timer = QTimer()
-        self.clock_timer.timeout.connect(self.update_clock)
-        self.clock_timer.start(1000)
-        self.update_clock()
-
+        self.export_formats = [
+            ("BVH", "Eksportuj BVH (Blender, Maya, Unity)"),
+            ("JSON", "Eksportuj JSON (surowe dane)"),
+            ("FBX", "Eksportuj FBX (animacja 3D)"),
+        ]
         self.init_ui()
 
     def init_ui(self):
         app.setStyleSheet("""
-            QPushButton {
-                background-color: #f9f9f9;
+            QComboBox, QComboBox QAbstractItemView {
+                background-color: #f0f6fa;
                 color: #2c3e50;
-                font-weight: 600;
-                font-size: 14px;
-                border: 1.5px solid #2980b9;
+                font-size: 15px;
+                border: 2px solid #2980b9;
                 border-radius: 8px;
-                padding: 8px 20px;
-                min-width: 100px;
-                min-height: 35px;
+                padding: 5px 18px 5px 10px;
+                min-width: 120px;
+            }
+            QComboBox QAbstractItemView {
+                selection-background-color: #b1d1f5;
+                selection-color: #2c3e50;
+            }
+            QPushButton {
+                background-color: #1FA5FF;
+                color: white;
+                font-weight: 600;
+                font-size: 18px;
+                border: none;
+                border-radius: 12px;
+                padding: 12px 40px;
+                margin: 10px 0;
+            }
+            QPushButton#startStop {
+                background-color: #32cb7c;
+                font-size: 19px;
+                min-width: 190px;
+                font-weight: bold;
+            }
+            QPushButton#startStop[recording="true"] {
+                background-color: #ff6565;
             }
             QPushButton:hover {
-                background-color: #3498db;
-                color: white;
-                border-color: #2980b9;
+                background-color: #1761a0;
             }
-            QPushButton:pressed {
-                background-color: #2980b9;
+            QGroupBox {
+                font-size: 16px;
+                font-weight: 600;
+                border: 1.5px solid #b1d1f5;
+                border-radius: 10px;
+                margin-top: 12px;
+                padding: 7px;
             }
         """)
 
@@ -203,80 +220,88 @@ class MotionCaptureApp(QMainWindow):
         tabs.addTab(self.export_tab, "📤 Eksport")
         tabs.addTab(self.help_tab, "🛟 Pomoc")
 
+        # --- GŁÓWNY ---
         layout = QVBoxLayout()
-
         cam_grp = QGroupBox("🎥 Kamera")
         cam_layout = QHBoxLayout()
+        cam_layout.setSpacing(18)
 
         self.res_combo = QComboBox()
         self.res_combo.addItems(["1280x720", "640x480", "1920x1080"])
         self.res_combo.setCurrentIndex(0)
-
         self.delay_combo = QComboBox()
         self.delay_combo.addItems(["0", "3", "5", "10"])
-
         self.mapping_combo = QComboBox()
         self.mapping_combo.addItems(["Mediapipe"])
         self.mapping_combo.currentTextChanged.connect(self.set_mapping_type)
-
         self.rotation_combo = QComboBox()
         self.rotation_combo.addItems(["Rotacje uproszczone (2D)", "Rotacje 3D (Euler)"])
         self.rotation_combo.currentIndexChanged.connect(self.set_rotation_mode)
+        self.quick_combo = QComboBox()
+        self.quick_combo.addItems(["Brak", "5 sekund", "10 sekund", "20 sekund"])
+        self.quick_combo.setCurrentIndex(0)
 
-        self.start_btn = QPushButton("🚩 Start")
-        self.start_btn.clicked.connect(self.toggle_capture)
+        # Start/Stop jeden przycisk
+        self.start_stop_btn = QPushButton("▶ Start")
+        self.start_stop_btn.setObjectName("startStop")
+        self.start_stop_btn.setProperty("recording", False)
+        self.start_stop_btn.clicked.connect(self.toggle_capture)
 
-        self.quick5_btn = QPushButton("Nagrywaj 5s")
-        self.quick5_btn.clicked.connect(lambda: self.quick_record(5))
-        self.quick10_btn = QPushButton("Nagrywaj 10s")
-        self.quick10_btn.clicked.connect(lambda: self.quick_record(10))
-
-        cam_layout.addWidget(QLabel("🔍 Rozdzielczość:"))
+        cam_layout.addWidget(QLabel("📏 Rozdzielczość:"))
         cam_layout.addWidget(self.res_combo)
-        cam_layout.addWidget(QLabel("⌚ Opóźnienie (s):"))
+        cam_layout.addWidget(QLabel("⏳ Opóźnienie (s):"))
         cam_layout.addWidget(self.delay_combo)
-        cam_layout.addWidget(QLabel("🦴 Mapowanie:"))
+        cam_layout.addWidget(QLabel("🔧 Mapowanie:"))
         cam_layout.addWidget(self.mapping_combo)
-        cam_layout.addWidget(QLabel("🔄 Rotacje:"))
+        cam_layout.addWidget(QLabel("🔁 Rotacje:"))
         cam_layout.addWidget(self.rotation_combo)
-        cam_layout.addWidget(self.start_btn)
-        cam_layout.addWidget(self.quick5_btn)
-        cam_layout.addWidget(self.quick10_btn)
+        cam_layout.addWidget(QLabel("⚡ Szybkie nagrywanie:"))
+        cam_layout.addWidget(self.quick_combo)
+        cam_layout.addSpacerItem(QSpacerItem(30, 10, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        cam_layout.addWidget(self.start_stop_btn)
 
         cam_grp.setLayout(cam_layout)
         layout.addWidget(cam_grp)
-
-        # Zegar w rogu (po starcie)
-        layout.addWidget(self.clock_lbl, alignment=Qt.AlignRight | Qt.AlignTop)
 
         self.img_lbl = QLabel()
         self.img_lbl.setFixedSize(self.width, self.height)
         layout.addWidget(self.img_lbl, alignment=Qt.AlignCenter)
         self.status_lbl = QLabel("Status: gotowy")
+        self.status_lbl.setStyleSheet("font-size:15px; color:#1761a0; padding:5px;")
         layout.addWidget(self.status_lbl)
-
         self.preview_btn = QPushButton("Podgląd skeletonu")
         self.preview_btn.clicked.connect(self.start_preview)
         layout.addWidget(self.preview_btn)
         self.main_tab.setLayout(layout)
 
-        el = QVBoxLayout()
-        btn_json = QPushButton("Zapisz JSON")
-        btn_json.clicked.connect(self.export_json)
-        btn_bvh = QPushButton("Eksportuj BVH")
-        btn_bvh.clicked.connect(self.export_bvh)
-        el.addWidget(btn_json)
-        el.addWidget(btn_bvh)
-        self.export_tab.setLayout(el)
+        # --- EKSPORT ---
+        export_layout = QVBoxLayout()
+        export_layout.setSpacing(20)
+        self.export_combo = QComboBox()
+        for code, label in self.export_formats:
+            self.export_combo.addItem(label, code)
+        self.export_combo.setCurrentIndex(0)
+        self.export_btn = QPushButton("Eksportuj")
+        self.export_btn.setStyleSheet("font-size:20px; background:#1FA5FF; border-radius:12px; padding:20px 0;")
+        self.export_btn.clicked.connect(self.export_selected)
+        self.export_info_lbl = QLabel("Wybierz format, by wyeksportować ruch do wybranego narzędzia animacji.")
+        self.export_info_lbl.setStyleSheet("font-size:15px; color:#1761a0; padding:5px;")
+        export_layout.addWidget(QLabel("Wybierz format eksportu:"))
+        export_layout.addWidget(self.export_combo)
+        export_layout.addWidget(self.export_btn)
+        export_layout.addWidget(self.export_info_lbl)
+        export_layout.addStretch()
+        self.export_tab.setLayout(export_layout)
 
+        # --- POMOC ---
         hl = QVBoxLayout()
         ht = QTextEdit()
         ht.setReadOnly(True)
         ht.setPlainText("Import BVH: File > Import > Motion Capture (.bvh)\n\n"
                         "Sugestie:\n"
                         "1. Nagrywaj ruch w głównym widoku.\n"
-                        "2. Eksportuj BVH w zakładce Eksport.\n"
-                        "3. Zaimportuj do Blendera do animacji postaci.")
+                        "2. Eksportuj BVH lub FBX w zakładce Eksport.\n"
+                        "3. Zaimportuj do Blendera, Unity lub Maya do animacji postaci.")
         hl.addWidget(ht)
         self.help_tab.setLayout(hl)
 
@@ -288,23 +313,31 @@ class MotionCaptureApp(QMainWindow):
 
     def toggle_capture(self):
         if not self.capturing:
+            self.capturing = True
+            self.start_stop_btn.setText("⏹ Stop")
+            self.start_stop_btn.setProperty("recording", True)
+            self.start_stop_btn.style().unpolish(self.start_stop_btn)
+            self.start_stop_btn.style().polish(self.start_stop_btn)
             self.delay = int(self.delay_combo.currentText())
-            self.status_lbl.setText(f"Start za {self.delay}s")
+            quick_idx = self.quick_combo.currentIndex()
+            if quick_idx == 0:
+                self.quick_record_pending = False
+                self.status_lbl.setText(f"Start za {self.delay}s")
+            else:
+                self.quick_record_pending = True
+                self.quick_record_seconds = [0, 5, 10, 20][quick_idx]
+                self.status_lbl.setText(f"Start za {self.delay}s, nagrywanie {self.quick_record_seconds}s...")
             self.delay_timer = QTimer()
             self.delay_timer.timeout.connect(self.update_delay_countdown)
             self.delay_timer.start(1000)
         else:
-            self.timer.stop()
-            if self.cap:
-                self.cap.release()
-            self.start_btn.setText("Start")
-            self.capturing = False
-            self.status_lbl.setText("Zatrzymano")
+            self.stop_recording()
 
     def update_delay_countdown(self):
         if self.delay > 1:
             self.delay -= 1
-            self.status_lbl.setText(f"Start za {self.delay}s")
+            self.status_lbl.setText(f"Start za {self.delay}s" + (
+                f", nagrywanie {self.quick_record_seconds}s..." if self.quick_record_pending else ""))
         else:
             self.delay_timer.stop()
             self.status_lbl.setText("Start!")
@@ -312,8 +345,6 @@ class MotionCaptureApp(QMainWindow):
 
     def start_capture(self):
         self.landmark_data.clear()
-        self.capturing = True
-        self.start_btn.setText("🛑 Stop")
         w, h = map(int, self.res_combo.currentText().split('x'))
         self.width, self.height = w, h
         self.cap = cv2.VideoCapture(0)
@@ -322,21 +353,23 @@ class MotionCaptureApp(QMainWindow):
         self.timer.start(33)
         self.status_lbl.setText("Przechwytywanie")
 
-    def quick_record(self, seconds):
-        if self.capturing:
-            return
-        self.delay = 0
-        self.record_seconds = seconds
-        self.status_lbl.setText(f"Nagrywanie {seconds}s...")
-        self.start_capture()
-        self.record_timer = QTimer()
-        self.record_timer.setSingleShot(True)
-        self.record_timer.timeout.connect(self.stop_quick_record)
-        self.record_timer.start(seconds * 1000)
+        if self.quick_record_pending:
+            self.record_timer = QTimer()
+            self.record_timer.setSingleShot(True)
+            self.record_timer.timeout.connect(self.stop_recording)
+            self.record_timer.start(self.quick_record_seconds * 1000)
+            self.quick_record_pending = False
 
-    def stop_quick_record(self):
-        self.toggle_capture()
-        self.status_lbl.setText("Zakończono szybkie nagrywanie.")
+    def stop_recording(self):
+        self.timer.stop()
+        if self.cap:
+            self.cap.release()
+        self.capturing = False
+        self.start_stop_btn.setText("▶ Start")
+        self.start_stop_btn.setProperty("recording", False)
+        self.start_stop_btn.style().unpolish(self.start_stop_btn)
+        self.start_stop_btn.style().polish(self.start_stop_btn)
+        self.status_lbl.setText("Nagrywanie zakończone.")
 
     def update_frame(self):
         try:
@@ -365,10 +398,7 @@ class MotionCaptureApp(QMainWindow):
             print("Błąd w update_frame:", e)
             self.status_lbl.setText(f"Błąd: {e}")
             self.timer.stop()
-
-    def update_clock(self):
-        from datetime import datetime
-        self.clock_lbl.setText(datetime.now().strftime("%H:%M:%S"))
+            self.stop_recording()
 
     def start_preview(self):
         if not self.landmark_data:
@@ -389,6 +419,17 @@ class MotionCaptureApp(QMainWindow):
         qt = QImage(frame.data, w, h, ch * w, QImage.Format_RGB888)
         self.img_lbl.setPixmap(QPixmap.fromImage(qt).scaled(self.img_lbl.size(), Qt.KeepAspectRatio))
         self.preview_index += 1
+
+    def export_selected(self):
+        code = self.export_combo.currentData()
+        if code == "BVH":
+            self.export_bvh()
+        elif code == "JSON":
+            self.export_json()
+        elif code == "FBX":
+            self.export_fbx()
+        else:
+            QMessageBox.warning(self, "Eksport", "Nieznany format eksportu!")
 
     def export_json(self):
         if not self.landmark_data:
@@ -547,6 +588,9 @@ ROOT Hips
             except Exception as e:
                 QMessageBox.critical(self, "Błąd eksportu BVH", str(e))
 
+    def export_fbx(self):
+        QMessageBox.information(self, "Eksport FBX", "Eksport do FBX wymaga użycia zewnętrznych narzędzi (np. Blender, pyfbx). Możesz załadować BVH do Blendera i wyeksportować jako FBX.")
+
     def closeEvent(self, event):
         if self.cap:
             self.cap.release()
@@ -556,7 +600,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
     font = QFont()
-    font.setPointSize(11)
+    font.setPointSize(12)
     app.setFont(font)
     window = MotionCaptureApp()
     window.show()
