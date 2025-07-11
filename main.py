@@ -78,7 +78,7 @@ class MotionCaptureApp(QMainWindow):
         super().__init__()
         self.setWindowTitle("Motion Capture App")
         # Ustawienie ikony okna
-        self.setWindowIcon(QIcon("E:\motion_capture_app\3208405.png"))
+        # self.setWindowIcon(QIcon("E:\motion_capture_app\3208405.png"))
 
         self.setMinimumSize(1000, 700)
 
@@ -100,7 +100,6 @@ class MotionCaptureApp(QMainWindow):
         self.init_ui()
 
     def init_ui(self):
-
         app.setStyleSheet("""
             QPushButton {
                 background-color: #f9f9f9;
