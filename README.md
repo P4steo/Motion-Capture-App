@@ -12,6 +12,7 @@ Aplikacja okienkowa do przechwytywania ruchu w czasie rzeczywistym z wykorzystan
 W folderze z plikami uruchom:
 ```bash
 py -m pip install -r requirements.txt
+main.py
 ```
 
 
