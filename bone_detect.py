@@ -1,15 +1,8 @@
 import cv2
-import numpy as np
 
-# OpenPose BODY_25 keypoint indices:
-# 0: Nose, 1: Neck, 2: RShoulder, 3: RElbow, 4: RWrist, 5: LShoulder, 6: LElbow, 7: LWrist
-# 8: MidHip, 9: RHip, 10: RKnee, 11: RAnkle, 12: LHip, 13: LKnee, 14: LAnkle
-# 15: REye, 16: LEye, 17: REar, 18: LEar, 19: LBigToe, 20: LSmallToe, 21: LHeel
-# 22: RBigToe, 23: RSmallToe, 24: RHeel
-
+# Mapowanie nazw "kości" OpenPose BODY_25 na indeksy keypointów
 OPENPOSE_BONE_MAP = {
     "root": 8,           # MidHip
-    "spine_base": 8,     # MidHip
     "spine_mid": 1,      # Neck
     "neck": 1,           # Neck
     "head": 0,           # Nose
@@ -29,6 +22,7 @@ OPENPOSE_BONE_MAP = {
     "right_foot": 24     # RHeel
 }
 
+# Połączenia kości do rysowania (każda para to linia)
 OPENPOSE_CONNECTIONS = [
     ("root", "spine_mid"),
     ("spine_mid", "neck"),
@@ -55,23 +49,23 @@ class OpenPoseBoneDetector:
 
     def detect(self, frame, keypoints):
         """
-        Draw skeleton bones on frame using OpenPose BODY_25 keypoints.
-        :param frame: np.ndarray, OpenCV frame (BGR)
-        :param keypoints: list of 25 elements [x, y, confidence] (pixel coordinates)
-        :return: frame with bones drawn
+        Rysuje szkielet na obrazie na podstawie punktów BODY_25 w formacie [[x, y, conf], ...]
+        :param frame: obraz OpenCV (BGR)
+        :param keypoints: lista 25 punktów [x, y, confidence]
+        :return: obraz z narysowanym szkieletem
         """
         bone_points = {}
         for name, idx in OPENPOSE_BONE_MAP.items():
             if idx >= len(keypoints):
                 continue
             x, y, conf = keypoints[idx]
-            if conf > 0.05:  # Only plot if confidence is high enough
+            if conf > 0.05:  # Rysuj tylko pewne punkty
                 bone_points[name] = (int(x), int(y))
-        # Draw bones
+        # Rysuj połączenia
         for a, b in OPENPOSE_CONNECTIONS:
             if a in bone_points and b in bone_points:
                 cv2.line(frame, bone_points[a], bone_points[b], (0, 255, 0), 2)
-        # Optionally: draw joints
+        # Rysuj punkty
         for pt in bone_points.values():
             cv2.circle(frame, pt, 4, (0, 0, 255), -1)
         return frame

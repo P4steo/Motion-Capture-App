@@ -4,93 +4,88 @@ import numpy as np
 import mediapipe as mp
 import json
 import datetime
-import math
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QVBoxLayout, QPushButton,
     QComboBox, QGroupBox, QMessageBox, QTabWidget, QTextEdit, QHBoxLayout
 )
 from PyQt5.QtCore import QTimer, Qt
-from PyQt5.QtGui import QImage, QPixmap, QFont, QIcon
+from PyQt5.QtGui import QImage, QPixmap, QFont
 
-# Map MediaPipe landmarks to Unreal UE5 bone names
-UE5_BONE_MAP = {
-    'pelvis': mp.solutions.pose.PoseLandmark.LEFT_HIP.value,
-    'spine_01': mp.solutions.pose.PoseLandmark.LEFT_SHOULDER.value,
-    'spine_02': mp.solutions.pose.PoseLandmark.RIGHT_SHOULDER.value,
-    'spine_03': mp.solutions.pose.PoseLandmark.NOSE.value,
-    'clavicle_l': mp.solutions.pose.PoseLandmark.LEFT_SHOULDER.value,
-    'upperarm_l': mp.solutions.pose.PoseLandmark.LEFT_ELBOW.value,
-    'lowerarm_l': mp.solutions.pose.PoseLandmark.LEFT_WRIST.value,
-    'hand_l': mp.solutions.pose.PoseLandmark.LEFT_INDEX.value,
-    'clavicle_r': mp.solutions.pose.PoseLandmark.RIGHT_SHOULDER.value,
-    'upperarm_r': mp.solutions.pose.PoseLandmark.RIGHT_ELBOW.value,
-    'lowerarm_r': mp.solutions.pose.PoseLandmark.RIGHT_WRIST.value,
-    'hand_r': mp.solutions.pose.PoseLandmark.RIGHT_INDEX.value,
-    'neck_01': mp.solutions.pose.PoseLandmark.NOSE.value,
-    'head': mp.solutions.pose.PoseLandmark.NOSE.value,
-    'thigh_l': mp.solutions.pose.PoseLandmark.LEFT_KNEE.value,
-    'calf_l': mp.solutions.pose.PoseLandmark.LEFT_ANKLE.value,
-    'foot_l': mp.solutions.pose.PoseLandmark.LEFT_HEEL.value,
-    'ball_l': mp.solutions.pose.PoseLandmark.LEFT_FOOT_INDEX.value,
-    'thigh_r': mp.solutions.pose.PoseLandmark.RIGHT_KNEE.value,
-    'calf_r': mp.solutions.pose.PoseLandmark.RIGHT_ANKLE.value,
-    'foot_r': mp.solutions.pose.PoseLandmark.RIGHT_HEEL.value,
-    'ball_r': mp.solutions.pose.PoseLandmark.RIGHT_FOOT_INDEX.value
-}
+from bone_detect import OpenPoseBoneDetector  # Import rysowania szkieletu
 
-HIERARCHY = [
-    ('root', None),
-    ('pelvis', 'root'),
-    ('spine_01', 'pelvis'),
-    ('spine_02', 'spine_01'),
-    ('spine_03', 'spine_02'),
-    ('clavicle_l', 'spine_03'),
-    ('upperarm_l', 'clavicle_l'),
-    ('lowerarm_l', 'upperarm_l'),
-    ('hand_l', 'lowerarm_l'),
-    ('clavicle_r', 'spine_03'),
-    ('upperarm_r', 'clavicle_r'),
-    ('lowerarm_r', 'upperarm_r'),
-    ('hand_r', 'lowerarm_r'),
-    ('neck_01', 'spine_03'),
-    ('head', 'neck_01'),
-    ('thigh_l', 'pelvis'),
-    ('calf_l', 'thigh_l'),
-    ('foot_l', 'calf_l'),
-    ('ball_l', 'foot_l'),
-    ('thigh_r', 'pelvis'),
-    ('calf_r', 'thigh_r'),
-    ('foot_r', 'calf_r'),
-    ('ball_r', 'foot_r')
+# Mapowanie punktów MediaPipe (33) na OpenPose BODY_25 (przybliżenie)
+MEDIAPIPE_TO_OPENPOSE = [
+    0,   # Nose
+    0,   # Neck (brak w MP - przyjmujemy Nose)
+    12,  # RShoulder
+    14,  # RElbow
+    16,  # RWrist
+    11,  # LShoulder
+    13,  # LElbow
+    15,  # LWrist
+    24,  # MidHip (liczony osobno!)
+    23,  # RHip
+    25,  # RKnee
+    27,  # RAnkle
+    24,  # LHip
+    26,  # LKnee
+    28,  # LAnkle
+    2,   # REye
+    5,   # LEye
+    7,   # REar
+    8,   # LEar
+    31,  # LBigToe
+    32,  # LSmallToe
+    29,  # LHeel
+    28,  # RBigToe (przybliżenie)
+    30,  # RSmallToe (przybliżenie)
+    27,  # RHeel (przybliżenie)
 ]
 
-
-def calculate_angle(a, b, c):
-    """Oblicz kąt ABC w stopniach."""
-    ba = np.array([a['x'] - b['x'], a['y'] - b['y'], a['z'] - b['z']])
-    bc = np.array([c['x'] - b['x'], c['y'] - b['y'], c['z'] - b['z']])
-    cosine = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc) + 1e-6)
-    return np.degrees(np.arccos(np.clip(cosine, -1, 1)))
-
+def mediapipe_keypoints_to_openpose(mp_landmarks):
+    """Konwertuje punkty MediaPipe na format OpenPose BODY_25 (przybliżenie). Wynik: lista 25 [x, y, confidence]"""
+    openpose_points = []
+    # MidHip = środek pomiędzy lewym i prawym biodrem
+    if len(mp_landmarks) > 24:
+        midhip_x = int((mp_landmarks[23]['x'] + mp_landmarks[24]['x']) / 2)
+        midhip_y = int((mp_landmarks[23]['y'] + mp_landmarks[24]['y']) / 2)
+        midhip_vis = (mp_landmarks[23]['visibility'] + mp_landmarks[24]['visibility']) / 2
+    else:
+        midhip_x, midhip_y, midhip_vis = 0, 0, 0
+    for idx in range(25):
+        mp_idx = MEDIAPIPE_TO_OPENPOSE[idx]
+        if idx == 8:  # MidHip
+            openpose_points.append([midhip_x, midhip_y, midhip_vis])
+        elif mp_idx >= len(mp_landmarks):
+            openpose_points.append([0, 0, 0])
+        else:
+            lm = mp_landmarks[mp_idx]
+            openpose_points.append([lm['x'], lm['y'], lm['visibility']])
+    return openpose_points
 
 class MotionCaptureApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Motion Capture App")
-        # Ustawienie ikony okna
-        # self.setWindowIcon(QIcon("E:\motion_capture_app\3208405.png"))
-
         self.setMinimumSize(1000, 700)
-
         self.cap = None
         self.mp_pose = mp.solutions.pose
-        self.pose = self.mp_pose.Pose()
+        self.pose = self.mp_pose.Pose(
+            static_image_mode=False,
+            model_complexity=2,  # NAJDOKŁADNIEJSZY model
+            enable_segmentation=False,
+            min_detection_confidence=0.6,
+            min_tracking_confidence=0.6
+        )
         self.mp_drawing = mp.solutions.drawing_utils
 
-        self.width, self.height = 640, 480
+        self.width, self.height = 1280, 720  # Wyższa rozdzielczość domyślnie
         self.capturing = False
         self.landmark_data = []
         self.preview_index = 0
+
+        self.mapping_type = "Mediapipe"
+        self.openpose_detector = OpenPoseBoneDetector()
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_frame)
@@ -111,18 +106,14 @@ class MotionCaptureApp(QMainWindow):
                 padding: 8px 20px;
                 min-width: 100px;
                 min-height: 35px;
-                box-shadow: 0 3px 5px rgba(41, 128, 185, 0.3);
-                transition: all 0.3s ease;
             }
             QPushButton:hover {
                 background-color: #3498db;
                 color: white;
                 border-color: #2980b9;
-                box-shadow: 0 4px 7px rgba(41, 128, 185, 0.5);
             }
             QPushButton:pressed {
                 background-color: #2980b9;
-                box-shadow: none;
             }
         """)
 
@@ -140,13 +131,14 @@ class MotionCaptureApp(QMainWindow):
         cam_layout = QHBoxLayout()
 
         self.res_combo = QComboBox()
-        self.res_combo.addItems(["640x480", "1280x720", "1920x1080"])
+        self.res_combo.addItems(["1280x720", "640x480", "1920x1080"])
+        self.res_combo.setCurrentIndex(0)  # Domyślnie 1280x720
 
         self.delay_combo = QComboBox()
         self.delay_combo.addItems(["0", "3", "5", "10"])
 
         self.mapping_combo = QComboBox()
-        self.mapping_combo.addItems(["Mediapipe", "AI_Detect"])
+        self.mapping_combo.addItems(["Mediapipe"])
         self.mapping_combo.currentTextChanged.connect(self.set_mapping_type)
 
         self.start_btn = QPushButton("🚩 Start")
@@ -189,27 +181,24 @@ class MotionCaptureApp(QMainWindow):
         ht = QTextEdit()
         ht.setReadOnly(True)
         ht.setPlainText("Import BVH: File > Import > Motion Capture (.bvh)\n\n"
-                        "Suggested workflow:\n"
+                        "Sugestie:\n"
                         "1. Nagrywaj ruch w głównym widoku.\n"
                         "2. Eksportuj BVH w zakładce Eksport.\n"
-                        "3. Zaimportuj do Blendera dla animacji swojej postaci.")
+                        "3. Zaimportuj do Blendera do animacji postaci.")
         hl.addWidget(ht)
         self.help_tab.setLayout(hl)
 
-    def set_mapping_type(self, mapowanie):
-        print(f"Wybrano mapowanie: {mapowanie}")
-        # dodać logikę zmiany mapowania tutaj
+    def set_mapping_type(self, selected_type):
+        self.mapping_type = selected_type
+        print(f"Wybrano mapowanie: {selected_type}")
 
     def toggle_capture(self):
         if not self.capturing:
             self.delay = int(self.delay_combo.currentText())
             self.status_lbl.setText(f"Start za {self.delay}s")
-
-            # Timer do odliczania delaya
             self.delay_timer = QTimer()
             self.delay_timer.timeout.connect(self.update_delay_countdown)
-            self.delay_timer.start(1000)  # co 1 sekundę
-
+            self.delay_timer.start(1000)
         else:
             self.timer.stop()
             if self.cap:
@@ -236,30 +225,31 @@ class MotionCaptureApp(QMainWindow):
         self.cap = cv2.VideoCapture(0)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
-        self.timer.start(33)
+        self.timer.start(33)  # 30 FPS
         self.status_lbl.setText("Przechwytywanie")
 
     def update_frame(self):
         ret, frame = self.cap.read()
-        if not ret: return
+        if not ret:
+            return
+
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         res = self.pose.process(rgb)
         if res.pose_landmarks:
-            self.mp_drawing.draw_landmarks(frame, res.pose_landmarks,
-                                           self.mp_pose.POSE_CONNECTIONS)
-            ld = [{'x': lm.x, 'y': lm.y, 'z': lm.z} for lm in res.pose_landmarks.landmark]
-            self.landmark_data.append(ld)
-            left_elbow = calculate_angle(
-                ld[self.mp_pose.PoseLandmark.LEFT_SHOULDER.value],
-                ld[self.mp_pose.PoseLandmark.LEFT_ELBOW.value],
-                ld[self.mp_pose.PoseLandmark.LEFT_WRIST.value]
-            )
-            left_knee = calculate_angle(
-                ld[self.mp_pose.PoseLandmark.LEFT_HIP.value],
-                ld[self.mp_pose.PoseLandmark.LEFT_KNEE.value],
-                ld[self.mp_pose.PoseLandmark.LEFT_ANKLE.value]
-            )
-            print(f"Elbow angle: {left_elbow:.1f}°, Knee angle: {left_knee:.1f}°")
+            # Pobierz punkty w px
+            mp_landmarks = []
+            for lm in res.pose_landmarks.landmark:
+                mp_landmarks.append({
+                    'x': int(lm.x * self.width),
+                    'y': int(lm.y * self.height),
+                    'z': lm.z,
+                    'visibility': lm.visibility
+                })
+            # Mapuj na OpenPose-like
+            openpose_points = mediapipe_keypoints_to_openpose(mp_landmarks)
+            # Rysuj szkielet OpenPose
+            frame = self.openpose_detector.detect(frame, openpose_points)
+            self.landmark_data.append(mp_landmarks)
         img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         h, w, ch = img.shape
         qt = QImage(img.data, w, h, ch * w, QImage.Format_RGB888)
@@ -267,7 +257,7 @@ class MotionCaptureApp(QMainWindow):
 
     def start_preview(self):
         if not self.landmark_data:
-            QMessageBox.warning(self, "Brak danych", "Najpierw nagraj dane.️")
+            QMessageBox.warning(self, "Brak danych", "Najpierw nagraj dane.")
             return
         self.preview_index = 0
         self.preview_timer.start(100)
@@ -277,14 +267,9 @@ class MotionCaptureApp(QMainWindow):
             self.preview_timer.stop()
             return
         frame = np.ones((self.height, self.width, 3), dtype=np.uint8) * 255
-        landmarks = self.landmark_data[self.preview_index]
-        for name, parent in HIERARCHY:
-            if parent and name in UE5_BONE_MAP and parent in UE5_BONE_MAP:
-                i0, i1 = UE5_BONE_MAP[name], UE5_BONE_MAP[parent]
-                if i0 < len(landmarks) and i1 < len(landmarks):
-                    x0, y0 = int(landmarks[i0]['x'] * self.width), int(landmarks[i0]['y'] * self.height)
-                    x1, y1 = int(landmarks[i1]['x'] * self.width), int(landmarks[i1]['y'] * self.height)
-                    cv2.line(frame, (x1, y1), (x0, y0), (0, 150, 0), 2)
+        mp_landmarks = self.landmark_data[self.preview_index]
+        openpose_points = mediapipe_keypoints_to_openpose(mp_landmarks)
+        frame = self.openpose_detector.detect(frame, openpose_points)
         h, w, ch = frame.shape
         qt = QImage(frame.data, w, h, ch * w, QImage.Format_RGB888)
         self.img_lbl.setPixmap(QPixmap.fromImage(qt).scaled(self.img_lbl.size(), Qt.KeepAspectRatio))
@@ -292,43 +277,37 @@ class MotionCaptureApp(QMainWindow):
 
     def export_json(self):
         if not self.landmark_data:
-            QMessageBox.warning(self, "⚠️Brak danych", "Najpierw nagraj dane.")
+            QMessageBox.warning(self, "Brak danych", "Najpierw nagraj dane.")
             return
         fn = f"mocap_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         with open(fn, 'w') as f:
             json.dump(self.landmark_data, f, indent=2)
-        QMessageBox.information(self, "✅ Zapisano", fn)
+        QMessageBox.information(self, "Zapisano", fn)
 
     def export_bvh(self):
         if not self.landmark_data:
-            QMessageBox.warning(self, "⚠️Brak danych", "Najpierw nagraj dane.")
+            QMessageBox.warning(self, "Brak danych", "Najpierw nagraj dane.")
             return
-
         def write_bvh(filename, frames):
             with open(filename, 'w') as f:
-                f.write("HIERARCHY\n")
-                for bone, parent in HIERARCHY:
-                    f.write(f"// {bone} parent: {parent}\n")
-                f.write("MOTION\n")
+                f.write("HIERARCHY\n// ...\nMOTION\n")
                 f.write(f"Frames: {len(frames)}\n")
                 f.write("Frame Time: 0.0333333\n")
                 for frame in frames:
-                    pelvis = frame[UE5_BONE_MAP['pelvis']]
-                    x, y, z = pelvis['x'] * 100, pelvis['y'] * 100, pelvis['z'] * 100
+                    pelvis = frame[24]  # LHip (przybliżenie)
+                    x, y, z = pelvis['x'], pelvis['y'], pelvis['z']
                     line = f"{x:.2f} {y:.2f} {z:.2f} 0.00 0.00 0.00"
-                    for _ in HIERARCHY[1:]:
+                    for _ in range(24):
                         line += " 0.00 0.00 0.00"
                     f.write(line + "\n")
-
         fn = f"mocap_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.bvh"
         write_bvh(fn, self.landmark_data)
-        QMessageBox.information(self, "✅ Zapisano BVH", fn)
+        QMessageBox.information(self, "Zapisano BVH", fn)
 
     def closeEvent(self, event):
         if self.cap:
             self.cap.release()
         event.accept()
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
