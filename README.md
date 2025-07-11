@@ -69,7 +69,8 @@ Instrukcje użycia eksportowanych plików `.bvh` w Blenderze:
 - Brak możliwości zatrzymania i wznowienia sesji
 
 ---
-
+## 📷 Zrzuty z ekranu
+<img width="998" height="749" alt="image" src="https://github.com/user-attachments/assets/2d8887cd-c321-4ee2-b485-6c512f73f6ee" />
 
 ---
 
