@@ -5,11 +5,8 @@ Aplikacja okienkowa do przechwytywania ruchu w czasie rzeczywistym z wykorzystan
 ## 📦 Wymagania
 
 - Python 3.9+
-- Biblioteki:
-
-```bash
-pip install opencv-python mediapipe PyQt5 numpy
-```
+- Biblioteki opisane w requirements.txt
+- Kamera lub CamoStudio
 
 ## 🚀 Uruchamianie
 W folderze z plikami uruchom:
