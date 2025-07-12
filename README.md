@@ -31,9 +31,10 @@ main.py
 - **Podgląd skeletonu** – wizualizuje zarejestrowany ruch w formie uproszczonego szkieletu 2D
 
 ### Zakładka „Eksport”:
-
-- **Zapisz JSON** – zapisuje surowe dane z landmarkami do pliku `.json`
+**Wybór formatu eksportu**
+- **Eksportuj JSON** – zapisuje surowe dane z landmarkami do pliku `.json`
 - **Eksportuj BVH** – eksportuje dane do pliku `.bvh`
+- **Eksportuj FBX** - wyświetla okno dialogowe z informacją, jak to zrobić w Blenderze `easteregg` XD
 
 ### Zakładka „Pomoc”:
 
