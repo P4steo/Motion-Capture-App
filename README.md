@@ -79,12 +79,12 @@ Instrukcje użycia eksportowanych plików `.bvh` w Blenderze:
 
 ---
 ## 🧨 Wskazówki
-Ustaw opcję **Rotacje** na `Uproszczona 2D`
-Ustaw opóźnienie startu na wystarczająco długo aby:
-- Ustawić się swobodnie przed kamerą
-- Stanąć w T-Pose `XD`
-**T-Pose jest wymagany tylko w pierwszej klatce**
-Polecam korzystać z opcji **Szybkie nagrywanie**
+- Ustaw opcję **Rotacje** na `Uproszczona 2D`
+- Ustaw opóźnienie startu na wystarczająco długo aby:
+  - Ustawić się swobodnie przed kamerą
+  - Stanąć w T-Pose `XD`
+- **T-Pose jest wymagany tylko w pierwszej klatce**
+- Polecam korzystać z opcji **Szybkie nagrywanie**
 
 ---
 
