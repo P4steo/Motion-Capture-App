@@ -25,6 +25,8 @@ main.py
 - **Rozdzielczość** – wybór rozdzielczości kamery (`640x480`, `1280x720`, `1920x1080`)
 - **Opóźnienie** – czas w sekundach przed rozpoczęciem nagrania (np. 3s na przygotowanie)
 - **Mapowanie** – aktualnie: `Mediapipe`, przyszłościowo inne modele
+- **Rotacje** - uproszczone 2D lub 3D Euler (w trakcie rozwoju)
+- **Szybkie nagrywanie** - możliwość nagrania fragmentu video (`5s`, `10s`, `20s`)
 - **Start/Stop** – rozpoczyna lub zatrzymuje przechwytywanie
 - **Podgląd skeletonu** – wizualizuje zarejestrowany ruch w formie uproszczonego szkieletu 2D
 
@@ -66,12 +68,14 @@ Instrukcje użycia eksportowanych plików `.bvh` w Blenderze:
 
 ## 🐞 Znane problemy
 
-- Brak wsparcia dla modeli 3D – tylko podgląd 2D
+- Brak wsparcia dla liczenia rotacji za pomocą Eulera, liczne błędy
 - Brak możliwości zatrzymania i wznowienia sesji
 
 ---
 ## 📷 Zrzuty z ekranu
-<img width="998" height="749" alt="image" src="https://github.com/user-attachments/assets/2d8887cd-c321-4ee2-b485-6c512f73f6ee" />
+<img width="1919" height="1026" alt="image" src="https://github.com/user-attachments/assets/b32bbecc-310a-405e-87c1-2d198b8dcfff" />
+
+
 
 ---
 
