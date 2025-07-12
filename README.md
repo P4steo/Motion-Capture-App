@@ -71,12 +71,20 @@ Instrukcje użycia eksportowanych plików `.bvh` w Blenderze:
 
 - Brak wsparcia dla liczenia rotacji za pomocą Eulera, liczne błędy
 - Brak możliwości zatrzymania i wznowienia sesji
+- Skalowalność
 
 ---
 ## 📷 Zrzuty z ekranu
 <img width="1919" height="1026" alt="image" src="https://github.com/user-attachments/assets/b32bbecc-310a-405e-87c1-2d198b8dcfff" />
 
-
+---
+## 🧨 Wskazówki
+Ustaw opcję **Rotacje** na `Uproszczona 2D`
+Ustaw opóźnienie startu na wystarczająco długo aby:
+- Ustawić się swobodnie przed kamerą
+- Stanąć w T-Pose `XD`
+**T-Pose jest wymagany tylko w pierwszej klatce**
+Polecam korzystać z opcji **Szybkie nagrywanie**
 
 ---
 
